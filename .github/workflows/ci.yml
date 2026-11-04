@@ -15,7 +15,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Отмечаем время старта для метрики пайплайна
       - name: Mark pipeline start
         run: python3 -c "import time,pathlib;pathlib.Path('test-metrics/.pipeline-start').write_text(str(time.time()))"
 
@@ -73,3 +72,31 @@ jobs:
             frontend/eslint-report.json
             metrics.json
             metrics-report.md
+
+
+  deploy:
+    needs: quality-test-build-metrics
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+        
+      - name: Build frontend for Pages
+        working-directory: frontend
+        run: npm run build -- --base-href /hr-management/
+        
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: frontend/dist/hr-app/browser
+          branch: gh-pages
