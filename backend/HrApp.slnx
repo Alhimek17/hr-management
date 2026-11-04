@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="HrApp.Api/HrApp.Api.csproj" />
+  <Project Path="HrApp.Tests/HrApp.Tests.csproj" />
+</Solution>

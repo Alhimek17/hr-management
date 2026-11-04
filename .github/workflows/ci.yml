@@ -1,0 +1,75 @@
+name: CI - quality-test-build-metrics
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'fix/**', 'release/**']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  quality-test-build-metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Отмечаем время старта для метрики пайплайна
+      - name: Mark pipeline start
+        run: python3 -c "import time,pathlib;pathlib.Path('test-metrics/.pipeline-start').write_text(str(time.time()))"
+
+      # ---------- Frontend ----------
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: ESLint
+        working-directory: frontend
+        run: npx eslint "src/**/*.{ts,html}" --format json --output-file eslint-report.json || true
+
+      - name: Frontend tests + coverage
+        working-directory: frontend
+        run: npx ng test --watch=false --browsers=ChromeHeadless --code-coverage
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      # ---------- Backend ----------
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore backend
+        run: dotnet restore backend/HrApp.slnx
+
+      - name: Backend tests + coverage
+        run: |
+          dotnet test backend/HrApp.slnx \
+            --collect:"XPlat Code Coverage" \
+            --logger "trx;LogFileName=test-results.trx" \
+            --results-directory ./TestResults
+
+      - name: Publish backend
+        run: dotnet publish backend/HrApp.Api/HrApp.Api.csproj -c Release -o ./publish
+
+      # ---------- Metrics ----------
+      - name: Collect metrics
+        run: python3 test-metrics/collect_metrics.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-artifacts
+          path: |
+            frontend/dist
+            publish
+            frontend/coverage
+            TestResults
+            frontend/eslint-report.json
+            metrics.json
+            metrics-report.md
